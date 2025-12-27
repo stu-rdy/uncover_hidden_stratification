@@ -9,3 +9,5 @@ scikit-learn
 wandb
 ipykernel
 PyYAML
+meerkat-ml
+domino

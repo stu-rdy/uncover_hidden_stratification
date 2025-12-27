@@ -1,0 +1,11 @@
+torch
+torchvision
+pandas
+numpy
+opencv-python
+tqdm
+requests
+scikit-learn
+wandb
+ipykernel
+PyYAML

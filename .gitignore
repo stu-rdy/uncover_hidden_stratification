@@ -1,0 +1,7 @@
+data/
+saves/
+wandb/
+__pycache__/
+.DS_Store
+.venv/
+.vscode/

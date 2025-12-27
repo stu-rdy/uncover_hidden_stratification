@@ -1,7 +1,7 @@
 wheel
 setuptools
 cython
-pandas<2.0.0
+pandas
 numpy<2.0.0
 opencv-python
 tqdm

@@ -1,8 +1,8 @@
 wheel
 setuptools
 cython
-pandas
-numpy<2.0.0
+pandas>=2.1.1
+numpy==1.26.4
 opencv-python
 tqdm
 requests

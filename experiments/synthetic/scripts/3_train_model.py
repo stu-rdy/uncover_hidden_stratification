@@ -98,6 +98,15 @@ def main():
     save_dir = os.path.join(PROJECT_ROOT, "saves/synthetic")
     os.makedirs(save_dir, exist_ok=True)
 
+    # Early Stopping Setup
+    es_config = config.get('training', {}).get('early_stopping', {})
+    early_stopping_enabled = es_config.get('enabled', False)
+    patience = es_config.get('patience', 5)
+    monitor_metric = es_config.get('monitor', 'val_acc')
+    
+    epochs_no_improve = 0
+    best_monitor_val = -1
+
     for epoch in tqdm(range(epochs), desc="Epochs", ascii=True, mininterval=1.0):
         loss, acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
         val_results = evaluate(model, val_loader, device)
@@ -107,16 +116,39 @@ def main():
         
         # Detailed metrics if configured
         metrics_config = config.get('metrics', {})
+        detailed_metrics = {}
         if metrics_config:
             detailed_metrics = compute_detailed_metrics(val_results, metrics_config, split="val")
             log_dict.update(detailed_metrics)
         
         tqdm.write(f"Epoch {epoch}: Loss {loss:.4f}, Train Acc {acc:.4f}, Val Acc {val_results['acc']:.4f}")
-        wandb.log(log_dict)
+        
+        # Early Stopping Logic
+        if early_stopping_enabled:
+            # Determine current value of the monitored metric
+            # val_acc is in the base logs, others are in detailed_metrics
+            current_monitor_val = log_dict.get(f"val/{monitor_metric}", log_dict.get(monitor_metric))
+            
+            if current_monitor_val > best_monitor_val:
+                best_monitor_val = current_monitor_val
+                epochs_no_improve = 0
+                tqdm.write(f"  --> Best {monitor_metric} improved to {best_monitor_val:.4f}. Saving model.")
+                torch.save(model.state_dict(), os.path.join(save_dir, "best_model.pth"))
+            else:
+                epochs_no_improve += 1
+                tqdm.write(f"  --> {monitor_metric} did not improve. Patience: {epochs_no_improve}/{patience}")
+            
+            if epochs_no_improve >= patience:
+                tqdm.write(f"Early stopping triggered at epoch {epoch}!")
+                wandb.log({"early_stop_epoch": epoch})
+                break
+        else:
+            # Standard best model saving if ES is disabled
+            if val_results['acc'] > best_acc:
+                best_acc = val_results['acc']
+                torch.save(model.state_dict(), os.path.join(save_dir, "best_model.pth"))
 
-        if val_results['acc'] > best_acc:
-            best_acc = val_results['acc']
-            torch.save(model.state_dict(), os.path.join(save_dir, "best_model.pth"))
+        wandb.log(log_dict)
 
     print("Training complete. Evaluating on test set...")
     model.load_state_dict(torch.load(os.path.join(save_dir, "best_model.pth")))

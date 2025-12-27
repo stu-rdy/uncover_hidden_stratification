@@ -31,6 +31,10 @@ training:
   momentum: 0.9
   weight_decay: 0.0001
   device: "cuda"
+  early_stopping:
+    enabled: true
+    patience: 5
+    monitor: "worst_group_acc" # Bissoto et al. focus on subgroup performance
 
 analysis:
   n_slices: 10

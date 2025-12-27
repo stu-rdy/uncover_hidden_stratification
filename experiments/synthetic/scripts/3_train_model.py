@@ -100,8 +100,17 @@ def main():
         loss, acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
         val_results = evaluate(model, val_loader, device)
         
+        # Base logs
+        log_dict = {"loss": loss, "train_acc": acc, "val_acc": val_results['acc'], "epoch": epoch}
+        
+        # Detailed metrics if configured
+        metrics_config = config.get('metrics', {})
+        if metrics_config:
+            detailed_metrics = compute_detailed_metrics(val_results, metrics_config, split="val")
+            log_dict.update(detailed_metrics)
+        
         tqdm.write(f"Epoch {epoch}: Loss {loss:.4f}, Train Acc {acc:.4f}, Val Acc {val_results['acc']:.4f}")
-        wandb.log({"loss": loss, "train_acc": acc, "val_acc": val_results['acc']})
+        wandb.log(log_dict)
 
         if val_results['acc'] > best_acc:
             best_acc = val_results['acc']
@@ -110,6 +119,12 @@ def main():
     print("Training complete. Evaluating on test set...")
     model.load_state_dict(torch.load(os.path.join(save_dir, "best_model.pth")))
     test_results = evaluate(model, test_loader, device)
+    
+    test_log = {"test/acc": test_results['acc']}
+    if metrics_config:
+        test_log.update(compute_detailed_metrics(test_results, metrics_config, split="test"))
+    wandb.log(test_log)
+    
     print(f"Test Acc: {test_results['acc']:.4f}")
     
     # Save predictions
@@ -121,5 +136,46 @@ def main():
     df_preds.to_csv(os.path.join(save_dir, "test_predictions.csv"), index=False)
     print(f"Saved predictions to {os.path.join(save_dir, 'test_predictions.csv')}")
 
+def compute_detailed_metrics(results, metrics_config, split="val"):
+    preds = results['preds']
+    labels = results['labels']
+    groups = results['groups'] # has_artifact 0 or 1
+    
+    metrics = {}
+    
+    # Per-subgroup Accuracy (Class x Group)
+    if metrics_config.get('log_subgroup_acc'):
+        subgroup_accs = []
+        for c in np.unique(labels):
+            for g in np.unique(groups):
+                mask = (labels == c) & (groups == g)
+                if np.sum(mask) > 0:
+                    acc = (preds[mask] == labels[mask]).mean()
+                    metrics[f"{split}/subgroup_acc/class_{int(c)}_group_{int(g)}"] = acc
+                    subgroup_accs.append(acc)
+        
+        if metrics_config.get('log_worst_group') and subgroup_accs:
+            metrics[f"{split}/worst_group_acc"] = min(subgroup_accs)
+            metrics[f"{split}/mean_group_acc"] = np.mean(subgroup_accs)
+
+    # Per-class Accuracy
+    if metrics_config.get('log_per_class_acc'):
+        for c in np.unique(labels):
+            mask = (labels == c)
+            acc = (preds[mask] == labels[mask]).mean()
+            metrics[f"{split}/class_acc/class_{int(c)}"] = acc
+
+    # Confusion Matrix
+    if metrics_config.get('log_confusion_matrix') and split == "test":
+        metrics[f"{split}/confusion_matrix"] = wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=labels,
+            preds=preds,
+            class_names=[str(i) for i in range(10)]
+        )
+        
+    return metrics
+
 if __name__ == "__main__":
+    import numpy as np
     main()

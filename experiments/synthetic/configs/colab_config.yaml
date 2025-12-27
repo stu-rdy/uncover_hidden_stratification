@@ -6,8 +6,15 @@ experiment:
 wandb:
   project: "synthetic_imagenette"
   entity: null
-  tags: ["colab", "standard", "synthetic"]
-  notes: "Standard run on Google Colab (T4 GPU)"
+  tags: ["colab", "exhaustive", "bissoto-reproduction", "synthetic"]
+  notes: "Exhaustive reproduction of 'Subgroup Performance in Hidden Stratifications' (Bissoto et al.)"
+
+metrics:
+  log_subgroup_acc: true
+  log_worst_group: true
+  log_balanced_acc: true
+  log_per_class_acc: true
+  log_confusion_matrix: true
 
 data:
   batch_size: 128

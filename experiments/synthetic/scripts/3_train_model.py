@@ -164,22 +164,11 @@ def main():
 
         # Detailed metrics if configured
         metrics_config = config.get("metrics", {})
-        detailed_metrics = {}
-        if metrics_config:
-            # Validation metrics (model behavior on decorrelated data)
+        if metrics_config.get("log_worst_group"):
             detailed_metrics = compute_detailed_metrics(
                 val_results, metrics_config, split="val"
             )
             log_dict.update(detailed_metrics)
-
-            # Training-time metrics (shows biased distribution + model behavior)
-            if metrics_config.get("log_training_metrics"):
-                train_detailed = compute_detailed_metrics(
-                    train_results, metrics_config, split="train"
-                )
-                train_dist = compute_training_distribution_metrics(train_results)
-                log_dict.update(train_detailed)
-                log_dict.update(train_dist)
 
         tqdm.write(
             f"Epoch {epoch}: Loss {train_results['loss']:.4f}, Train Acc {train_results['acc']:.4f}, Val Acc {val_results['acc']:.4f}"
@@ -245,35 +234,26 @@ def main():
 
 
 def compute_detailed_metrics(results, metrics_config, split="val"):
+    """Compute only essential metrics: worst_group_acc and confusion_matrix."""
     preds = results["preds"]
     labels = results["labels"]
     groups = results["groups"]  # has_artifact 0 or 1
 
     metrics = {}
 
-    # Per-subgroup Accuracy (Class x Group)
-    if metrics_config.get("log_subgroup_acc"):
+    # Worst-group Accuracy (key metric for subgroup performance)
+    if metrics_config.get("log_worst_group"):
         subgroup_accs = []
         for c in np.unique(labels):
             for g in np.unique(groups):
                 mask = (labels == c) & (groups == g)
                 if np.sum(mask) > 0:
                     acc = (preds[mask] == labels[mask]).mean()
-                    metrics[f"{split}/subgroup_acc/class_{int(c)}_group_{int(g)}"] = acc
                     subgroup_accs.append(acc)
-
-        if metrics_config.get("log_worst_group") and subgroup_accs:
+        if subgroup_accs:
             metrics[f"{split}/worst_group_acc"] = min(subgroup_accs)
-            metrics[f"{split}/mean_group_acc"] = np.mean(subgroup_accs)
 
-    # Per-class Accuracy
-    if metrics_config.get("log_per_class_acc"):
-        for c in np.unique(labels):
-            mask = labels == c
-            acc = (preds[mask] == labels[mask]).mean()
-            metrics[f"{split}/class_acc/class_{int(c)}"] = acc
-
-    # Confusion Matrix
+    # Confusion Matrix (only for test set)
     if metrics_config.get("log_confusion_matrix") and split == "test":
         metrics[f"{split}/confusion_matrix"] = wandb.plot.confusion_matrix(
             probs=None,
@@ -281,35 +261,6 @@ def compute_detailed_metrics(results, metrics_config, split="val"):
             preds=preds,
             class_names=[str(i) for i in range(10)],
         )
-
-    return metrics
-
-
-def compute_training_distribution_metrics(results, biased_class_idx=0):
-    """
-    Compute data distribution metrics for training set.
-    Uses 'train/data/*' naming to distinguish from model behavior metrics.
-    """
-    labels = results["labels"]
-    groups = results["groups"]  # 0 = no artifact, 1 = artifact
-
-    metrics = {}
-
-    # Per-class artifact rates (should show ~95% for biased class, ~5% for others)
-    for c in np.unique(labels):
-        mask = labels == c
-        artifact_rate = groups[mask].mean()
-        metrics[f"train/data/artifact_rate/class_{int(c)}"] = artifact_rate
-
-    # Overall artifact rate
-    metrics["train/data/artifact_rate/overall"] = groups.mean()
-
-    # Artifact-class correlation (high = model can use artifact as shortcut)
-    biased_class_mask = labels == biased_class_idx
-    if len(np.unique(groups)) > 1 and len(np.unique(biased_class_mask)) > 1:
-        metrics["train/data/artifact_class_correlation"] = np.corrcoef(
-            groups, biased_class_mask.astype(int)
-        )[0, 1]
 
     return metrics
 

@@ -10,12 +10,9 @@ wandb:
   notes: "Reproduction of 'Subgroup Performance in Hidden Stratifications' (Bissoto et al.)"
 
 metrics:
-  log_subgroup_acc: true
   log_worst_group: true
   log_balanced_acc: true
-  log_per_class_acc: true
   log_confusion_matrix: true
-  log_training_metrics: true  # Log training-time distribution metrics (artifact-class correlation)
 
 data:
   batch_size: 128

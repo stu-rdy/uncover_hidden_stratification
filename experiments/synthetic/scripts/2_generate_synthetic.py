@@ -58,24 +58,6 @@ def main():
         artifact_rate = df["has_artifact"].mean()
         wandb.log({f"{split}/size": len(df), f"{split}/artifact_rate": artifact_rate})
 
-        # Log class distribution as a bar chart (displays properly in dashboard)
-        class_counts = df["target"].value_counts().reset_index()
-        class_counts.columns = ["class", "count"]
-        data = [
-            [str(x), y] for x, y in zip(class_counts["class"], class_counts["count"])
-        ]
-        table = wandb.Table(data=data, columns=["class", "count"])
-        wandb.log(
-            {
-                f"{split}/class_distribution": wandb.plot.bar(
-                    table,
-                    "class",
-                    "count",
-                    title=f"{split.capitalize()} Class Distribution",
-                )
-            }
-        )
-
     print("Synthetic dataset generation complete.")
     wandb.finish()
 

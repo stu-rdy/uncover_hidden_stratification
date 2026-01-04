@@ -200,11 +200,7 @@ def main():
         # Log key summary metrics
         wandb.log(
             {
-                "test/overall_accuracy": (
-                    test_pred_labels == df_test["target"].data
-                ).mean(),
                 "test/worst_slice_accuracy": test_res_df["accuracy"].min(),
-                "test/best_slice_accuracy": test_res_df["accuracy"].max(),
                 "test/accuracy_gap": test_res_df["accuracy"].max()
                 - test_res_df["accuracy"].min(),
             }

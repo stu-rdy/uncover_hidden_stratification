@@ -122,17 +122,27 @@ def main():
     slice_preds_val = np.argmax(df_val["domino_slices"].data, axis=1)
     slice_preds_test = np.argmax(df_test["domino_slices"].data, axis=1)
 
-    # Analysis on both val and test
+    # Get predicted class labels from probabilities
+    val_pred_labels = np.argmax(df_val["pred_probs"].data, axis=1)
+    test_pred_labels = np.argmax(df_test["pred_probs"].data, axis=1)
+
+    # Analysis on both val and test (now includes per-slice accuracy)
     print("\n=== Validation Set Analysis ===")
     val_res_df = analyze_slices(
-        slice_preds_val, df_val["has_artifact"].data, df_val["target"].data
+        slice_preds_val,
+        df_val["has_artifact"].data,
+        df_val["target"].data,
+        val_pred_labels,
     )
     val_res_df["split"] = "val"
     print(val_res_df)
 
     print("\n=== Test Set Analysis ===")
     test_res_df = analyze_slices(
-        slice_preds_test, df_test["has_artifact"].data, df_test["target"].data
+        slice_preds_test,
+        df_test["has_artifact"].data,
+        df_test["target"].data,
+        test_pred_labels,
     )
     test_res_df["split"] = "test"
     print(test_res_df)
@@ -151,6 +161,55 @@ def main():
     # Log results to wandb
     table = wandb.Table(dataframe=res_df)
     wandb.log({"analysis_results": table})
+
+    # Log per-slice accuracy bar charts for test set (key visualization)
+    if "accuracy" in test_res_df.columns:
+        # Per-slice accuracy bar chart
+        acc_data = [
+            [f"Slice {row['slice']}", row["accuracy"]]
+            for _, row in test_res_df.iterrows()
+        ]
+        acc_table = wandb.Table(data=acc_data, columns=["slice", "accuracy"])
+        wandb.log(
+            {
+                "test/slice_accuracy": wandb.plot.bar(
+                    acc_table, "slice", "accuracy", title="Test Set: Per-Slice Accuracy"
+                )
+            }
+        )
+
+        # Per-slice artifact rate bar chart
+        artifact_data = [
+            [f"Slice {row['slice']}", row["artifact_rate"]]
+            for _, row in test_res_df.iterrows()
+        ]
+        artifact_table = wandb.Table(
+            data=artifact_data, columns=["slice", "artifact_rate"]
+        )
+        wandb.log(
+            {
+                "test/slice_artifact_rate": wandb.plot.bar(
+                    artifact_table,
+                    "slice",
+                    "artifact_rate",
+                    title="Test Set: Per-Slice Artifact Rate",
+                )
+            }
+        )
+
+        # Log key summary metrics
+        wandb.log(
+            {
+                "test/overall_accuracy": (
+                    test_pred_labels == df_test["target"].data
+                ).mean(),
+                "test/worst_slice_accuracy": test_res_df["accuracy"].min(),
+                "test/best_slice_accuracy": test_res_df["accuracy"].max(),
+                "test/accuracy_gap": test_res_df["accuracy"].max()
+                - test_res_df["accuracy"].min(),
+            }
+        )
+
     wandb.finish()
 
 

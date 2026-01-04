@@ -2,8 +2,6 @@ import os
 import sys
 import argparse
 import yaml
-import wandb
-import pandas as pd
 
 # Add project root and experiment src to path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +16,7 @@ def main():
     parser.add_argument("--config", type=str, help="Path to YAML config file")
     parser.add_argument("--project", default="synthetic_imagenette")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--no-wandb", action="store_true", help="Skip wandb logging")
     args = parser.parse_args()
 
     # Load YAML config if provided
@@ -26,18 +25,21 @@ def main():
         with open(args.config, "r") as f:
             config = yaml.safe_load(f)
 
-    # WandB Init
-    wb_conf = config.get("wandb", {})
-    project = wb_conf.get("project", args.project)
+    # Optional WandB Init
+    use_wandb = not args.no_wandb
+    if use_wandb:
+        import wandb
 
-    wandb.init(
-        project=project,
-        entity=wb_conf.get("entity"),
-        tags=wb_conf.get("tags"),
-        notes=wb_conf.get("notes"),
-        job_type="data_generation",
-        config=config or args,
-    )
+        wb_conf = config.get("wandb", {})
+        project = wb_conf.get("project", args.project)
+        wandb.init(
+            project=project,
+            entity=wb_conf.get("entity"),
+            tags=wb_conf.get("tags"),
+            notes=wb_conf.get("notes"),
+            job_type="data_generation",
+            config=config or args,
+        )
 
     seed = config.get("experiment", {}).get("seed", args.seed)
 
@@ -46,7 +48,8 @@ def main():
 
     if not os.path.exists(source_dir):
         print("Source data not found. Run 1_setup_data.py first.")
-        wandb.finish()
+        if use_wandb:
+            wandb.finish()
         return
 
     df_train, df_val, df_test = generate_synthetic_dataset(
@@ -56,10 +59,17 @@ def main():
     # Log stats
     for split, df in [("train", df_train), ("val", df_val), ("test", df_test)]:
         artifact_rate = df["has_artifact"].mean()
-        wandb.log({f"{split}/size": len(df), f"{split}/artifact_rate": artifact_rate})
+        print(f"  {split}: {len(df)} images, artifact rate: {artifact_rate:.3f}")
+        if use_wandb:
+            import wandb
+
+            wandb.log(
+                {f"{split}/size": len(df), f"{split}/artifact_rate": artifact_rate}
+            )
 
     print("Synthetic dataset generation complete.")
-    wandb.finish()
+    if use_wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ metrics:
   log_balanced_acc: true
   log_per_class_acc: true
   log_confusion_matrix: true
+  log_training_metrics: true  # Log training-time distribution metrics (artifact-class correlation)
 
 data:
   batch_size: 128

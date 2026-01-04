@@ -102,16 +102,21 @@ def main():
 
     # Create lookup dicts keyed by image name for safe merging
     val_pred_lookup = {
-        row["name"]: row[sorted_pred_cols].values for _, row in val_preds_df.iterrows()
+        row["name"]: row[sorted_pred_cols].values.astype(np.float64)
+        for _, row in val_preds_df.iterrows()
     }
     test_pred_lookup = {
-        row["name"]: row[sorted_pred_cols].values for _, row in test_preds_df.iterrows()
+        row["name"]: row[sorted_pred_cols].values.astype(np.float64)
+        for _, row in test_preds_df.iterrows()
     }
 
     # Match predictions to embeddings by name
-    val_probs = np.array([val_pred_lookup[name] for name in df_val["image_path"].data])
+    val_probs = np.array(
+        [val_pred_lookup[name] for name in df_val["image_path"].data], dtype=np.float64
+    )
     test_probs = np.array(
-        [test_pred_lookup[name] for name in df_test["image_path"].data]
+        [test_pred_lookup[name] for name in df_test["image_path"].data],
+        dtype=np.float64,
     )
 
     df_val["pred_probs"] = val_probs

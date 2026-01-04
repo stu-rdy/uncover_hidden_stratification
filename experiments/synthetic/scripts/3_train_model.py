@@ -237,9 +237,21 @@ def main():
 
     print(f"Test Acc: {test_results['acc']:.4f}")
 
-    # Save predictions
+    # Save predictions for both val and test (analysis script needs both)
     import pandas as pd
 
+    # Val predictions (Domino fits on val set)
+    val_results_final = evaluate(model, val_loader, device)
+    df_val_preds = pd.DataFrame(
+        val_results_final["probs"], columns=[f"pred_{i}" for i in range(10)]
+    )
+    df_val_preds["name"] = val_results_final["names"]
+    df_val_preds["gt"] = val_results_final["labels"]
+    df_val_preds["group"] = val_results_final["groups"]
+    df_val_preds.to_csv(os.path.join(save_dir, "val_predictions.csv"), index=False)
+    print(f"Saved predictions to {os.path.join(save_dir, 'val_predictions.csv')}")
+
+    # Test predictions
     df_preds = pd.DataFrame(
         test_results["probs"], columns=[f"pred_{i}" for i in range(10)]
     )

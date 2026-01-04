@@ -81,6 +81,14 @@ def main():
     df_val = mk.read(val_embed_path)
     df_test = mk.read(test_embed_path)
 
+    # Sanity check: ensure embeddings were extracted correctly
+    assert "clip(img)" in df_val.columns, (
+        f"Expected 'clip(img)' column in embeddings. Found: {list(df_val.columns)}"
+    )
+    assert "clip(img)" in df_test.columns, (
+        f"Expected 'clip(img)' column in embeddings. Found: {list(df_test.columns)}"
+    )
+
     # Load predictions for val and test
     val_preds_path = os.path.join(PROJECT_ROOT, "saves/synthetic/val_predictions.csv")
     test_preds_path = args.predictions_csv  # test_predictions.csv
@@ -88,12 +96,26 @@ def main():
     val_preds_df = pd.read_csv(val_preds_path)
     test_preds_df = pd.read_csv(test_preds_path)
 
-    # Merge predictions
+    # Merge predictions by image name (not index position - avoids silent misalignment)
     pred_cols = [c for c in val_preds_df.columns if c.startswith("pred_")]
     sorted_pred_cols = sorted(pred_cols, key=lambda x: int(x.split("_")[1]))
 
-    df_val["pred_probs"] = val_preds_df[sorted_pred_cols].values
-    df_test["pred_probs"] = test_preds_df[sorted_pred_cols].values
+    # Create lookup dicts keyed by image name for safe merging
+    val_pred_lookup = {
+        row["name"]: row[sorted_pred_cols].values for _, row in val_preds_df.iterrows()
+    }
+    test_pred_lookup = {
+        row["name"]: row[sorted_pred_cols].values for _, row in test_preds_df.iterrows()
+    }
+
+    # Match predictions to embeddings by name
+    val_probs = np.array([val_pred_lookup[name] for name in df_val["image_path"].data])
+    test_probs = np.array(
+        [test_pred_lookup[name] for name in df_test["image_path"].data]
+    )
+
+    df_val["pred_probs"] = val_probs
+    df_test["pred_probs"] = test_probs
 
     # Run Domino - FIT ON VAL, predict on both (matches original notebook methodology)
     print(f"Running Domino with {n_slices} slices and weight {weight}...")
@@ -119,6 +141,7 @@ def main():
         data=df_test, embeddings="clip(img)", targets="target", pred_probs="pred_probs"
     )
 
+    # Extract hard slice assignments (domino_slices is a soft assignment matrix [n_samples, n_slices])
     slice_preds_val = np.argmax(df_val["domino_slices"].data, axis=1)
     slice_preds_test = np.argmax(df_test["domino_slices"].data, axis=1)
 

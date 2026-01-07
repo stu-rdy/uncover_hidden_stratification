@@ -39,6 +39,7 @@ def download_imagenette(data_dir):
 
 
 def add_vertical_line_artifact(image_path, output_path):
+    """Add vertical hyperintense line artifact (center of image)."""
     img = cv2.imread(image_path)
     if img is None:
         return False
@@ -46,6 +47,36 @@ def add_vertical_line_artifact(image_path, output_path):
     cv2.line(img, (w // 2, 0), (w // 2, h), (255, 255, 255), thickness=2)
     cv2.imwrite(output_path, img)
     return True
+
+
+def add_hospital_tag_artifact(image_path, output_path):
+    """Add hospital tag artifact (bottom-left corner rectangle with text)."""
+    img = cv2.imread(image_path)
+    if img is None:
+        return False
+    h, w, _ = img.shape
+    # Draw white rectangle in bottom-left corner
+    tag_h, tag_w = h // 6, w // 4
+    cv2.rectangle(img, (0, h - tag_h), (tag_w, h), (255, 255, 255), -1)
+    # Add "ID" text inside the tag
+    font_scale = max(0.3, tag_h / 50)
+    cv2.putText(
+        img,
+        "ID",
+        (5, h - tag_h // 3),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        (0, 0, 0),
+        1,
+    )
+    cv2.imwrite(output_path, img)
+    return True
+
+
+ARTIFACT_FUNCTIONS = {
+    "vertical_line": add_vertical_line_artifact,
+    "hospital_tag": add_hospital_tag_artifact,
+}
 
 
 def stable_split(name, seed=42):
@@ -57,7 +88,7 @@ def stable_split(name, seed=42):
 def generate_synthetic_dataset(
     source_dir,
     target_dir,
-    biased_class_idx=0,
+    biased_classes=None,  # List of (class_idx, artifact_type) tuples
     prob_biased=0.95,
     prob_others=0.05,
     seed=42,
@@ -65,11 +96,18 @@ def generate_synthetic_dataset(
     """
     Generate synthetic dataset with artifact injection.
 
+    Args:
+        biased_classes: List of (class_idx, artifact_type) tuples.
+                       Default: [(0, "vertical_line"), (1, "hospital_tag")]
+                       artifact_type must be one of: "vertical_line", "hospital_tag"
+
     Fixed split logic:
     1. Assign final splits (train/val/test) FIRST using stable hash
     2. Apply artifact logic based on final split
     3. Guarantees reproducible artifact balance per split
     """
+    if biased_classes is None:
+        biased_classes = [(0, "vertical_line"), (1, "hospital_tag")]
     random.seed(seed)
     np.random.seed(seed)
 
@@ -134,21 +172,37 @@ def generate_synthetic_dataset(
         os.makedirs(tgt_cls_dir, exist_ok=True)
         tgt_path = os.path.join(tgt_cls_dir, img_name)
 
-        # Apply artifact logic based on FINAL split
+        # Determine which artifact type (if any) to apply
+        biased_class_map = {
+            cls_idx: artifact_type for cls_idx, artifact_type in biased_classes
+        }
+        artifact_types = [a[1] for a in biased_classes]
+
         has_artifact = 0
+        artifact_type = None
+
         if final_split == "train":
-            # Training: biased distribution (95% for biased class, 5% for others)
-            p = prob_biased if cls_idx == biased_class_idx else prob_others
-            if random.random() < p:
-                has_artifact = 1
+            # Training: biased distribution (95% for biased classes, 5% for others)
+            if cls_idx in biased_class_map:
+                # This class is biased - use its assigned artifact
+                if random.random() < prob_biased:
+                    has_artifact = 1
+                    artifact_type = biased_class_map[cls_idx]
+            else:
+                # Non-biased class - small chance of any artifact
+                if random.random() < prob_others:
+                    has_artifact = 1
+                    artifact_type = random.choice(artifact_types)
         else:
-            # Val/Test: decorrelated 50/50
+            # Val/Test: decorrelated 50/50, random artifact type
             if random.random() < 0.5:
                 has_artifact = 1
+                artifact_type = random.choice(artifact_types)
 
         # Copy/modify image
-        if has_artifact:
-            add_vertical_line_artifact(src_path, tgt_path)
+        if has_artifact and artifact_type:
+            artifact_fn = ARTIFACT_FUNCTIONS[artifact_type]
+            artifact_fn(src_path, tgt_path)
         else:
             shutil.copy(src_path, tgt_path)
 
@@ -159,6 +213,7 @@ def generate_synthetic_dataset(
                 ),
                 "target": cls_idx,
                 "has_artifact": has_artifact,
+                "artifact_type": artifact_type if has_artifact else None,
                 "split": final_split,
             }
         )

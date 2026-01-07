@@ -7,17 +7,24 @@ This experiment reproduces the synthetic artifact methodology from **Bissoto et 
 ## 1. Experimental Setup
 
 ### Dataset Construction
-- **Base Dataset**: Imagenette (10 classes, 224×224 images)
-- **Synthetic Artifact**: Gaussian noise patch applied to one corner of images
-- **Biased Class**: Class 0 receives artifacts with 95% probability
-- **Other Classes**: Receive artifacts with only 5% probability
+- **Base Dataset**: Imagenette-320 (10 classes, 320×320 images)
+- **Two Synthetic Artifacts** (following Bissoto et al.):
+  1. **Vertical Line**: White hyperintense line down center of image
+  2. **Hospital Tag**: White rectangle with "ID" text in bottom-left corner
+
+### Artifact Injection Rules
+| Class | Training Artifact Rate | Artifact Type |
+|-------|------------------------|---------------|
+| Class 0 | 95% | Vertical Line |
+| Class 1 | 95% | Hospital Tag |
+| Classes 2-9 | 5% (random type) | Either |
 
 ### Train/Val/Test Split Design
 | Split | Artifact Rate | Purpose |
 |-------|---------------|---------|
-| Train | ~13.7% | Biased distribution (class 0 dominates artifact presence) |
-| Val   | ~51.0% | Decorrelated (artifacts uniformly distributed across classes) |
-| Test  | ~50.0% | Decorrelated (same as val, for final evaluation) |
+| Train | Biased | 95% for classes 0,1; 5% for others |
+| Val   | ~50% | Decorrelated (random artifact type) |
+| Test  | ~50% | Decorrelated (random artifact type) |
 
 > [!IMPORTANT]
 > The key design: training data has **spurious correlation** between artifacts and class 0, while evaluation data has **no correlation**. This forces the model to rely on shortcuts during training that fail at test time for specific subgroups.

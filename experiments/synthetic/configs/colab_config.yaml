@@ -22,25 +22,25 @@ synthetic:
   known_artifact: "vertical_line"  # Known attribute (independent)
   prob_hidden_biased: 0.8  # Bissoto uses 0.6, 0.7, 0.8
   prob_hidden_others: 0.05
-  prob_known: 0.5
+  prob_known: 0.25
 
 data:
-  batch_size: 128
+  batch_size: 64
   num_workers: 2
   image_size: 224
 
 model:
-  arch: "resnet18"
+  arch: "resnet50"
   pretrained: true
 
 training:
-  epochs: 20
-  learning_rate: 0.01
+  epochs: 30
+  learning_rate: 0.001
   momentum: 0.9
   weight_decay: 0.0001
   device: "cuda"
   early_stopping:
-    enabled: true
+    enabled: false
     patience: 5
     monitor: "val_acc"
 

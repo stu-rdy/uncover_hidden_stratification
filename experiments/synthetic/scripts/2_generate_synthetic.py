@@ -51,6 +51,8 @@ def main():
     prob_hidden_biased = syn_conf.get("prob_hidden_biased", 0.8)
     prob_hidden_others = syn_conf.get("prob_hidden_others", 0.05)
     prob_known = syn_conf.get("prob_known", 0.5)
+    blur_sigma = syn_conf.get("blur_sigma", 0.0)
+    noise_std = syn_conf.get("noise_std", 0.0)
 
     source_dir = os.path.join(PROJECT_ROOT, "data/imagenette2-320")
     target_dir = os.path.join(PROJECT_ROOT, "data/synthetic_imagenette")
@@ -70,6 +72,8 @@ def main():
         prob_hidden_biased=prob_hidden_biased,
         prob_hidden_others=prob_hidden_others,
         prob_known=prob_known,
+        blur_sigma=blur_sigma,
+        noise_std=noise_std,
         seed=seed,
     )
 

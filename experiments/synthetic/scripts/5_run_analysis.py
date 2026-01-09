@@ -81,6 +81,15 @@ def main():
     df_val = mk.read(val_embed_path)
     df_test = mk.read(test_embed_path)
 
+    # Check for NaNs in embeddings
+    if np.isnan(df_val["clip(img)"].data).any():
+        print("⚠️ Warning: NaNs found in validation embeddings! Filling with 0.")
+        df_val["clip(img)"].data = np.nan_to_num(df_val["clip(img)"].data)
+    
+    if np.isnan(df_test["clip(img)"].data).any():
+        print("⚠️ Warning: NaNs found in test embeddings! Filling with 0.")
+        df_test["clip(img)"].data = np.nan_to_num(df_test["clip(img)"].data)
+
     # Sanity check: ensure embeddings were extracted correctly
     assert "clip(img)" in df_val.columns, (
         f"Expected 'clip(img)' column in embeddings. Found: {list(df_val.columns)}"
@@ -99,6 +108,7 @@ def main():
     # Merge predictions by image name (not index position - avoids silent misalignment)
     pred_cols = [c for c in val_preds_df.columns if c.startswith("pred_")]
     sorted_pred_cols = sorted(pred_cols, key=lambda x: int(x.split("_")[1]))
+    n_classes = len(sorted_pred_cols)
 
     # Create lookup dicts keyed by image name for safe merging
     val_pred_lookup = {
@@ -119,31 +129,51 @@ def main():
         dtype=np.float64,
     )
 
+    # Convert targets to one-hot for stability in Domino if needed
+    val_targets = np.eye(n_classes)[df_val["target"].data.astype(int)]
+    test_targets = np.eye(n_classes)[df_test["target"].data.astype(int)]
+
+    # Normalize prediction probabilities to ensure they sum to 1 and have no zeros
+    val_probs = np.clip(val_probs, 1e-6, 1.0)
+    val_probs /= val_probs.sum(axis=1, keepdims=True)
+    test_probs = np.clip(test_probs, 1e-6, 1.0)
+    test_probs /= test_probs.sum(axis=1, keepdims=True)
+
     df_val["pred_probs"] = val_probs
     df_test["pred_probs"] = test_probs
+    df_val["target_onehot"] = val_targets
+    df_test["target_onehot"] = test_targets
+
+    # Check for NaNs in prediction probabilities
+    if np.isnan(val_probs).any() or np.isnan(test_probs).any():
+        print("⚠️ Warning: NaNs found in prediction probabilities!")
+
+    # Set environment variable to avoid KMeans memory leak on Windows
+    os.environ["OMP_NUM_THREADS"] = "1"
 
     # Run Domino - FIT ON VAL, predict on both (matches original notebook methodology)
     print(f"Running Domino with {n_slices} slices and weight {weight}...")
     domino = DominoSlicer(
         y_log_likelihood_weight=0,
         y_hat_log_likelihood_weight=weight,
-        n_mixture_components=n_slices,
+        n_mixture_components=25,
         n_slices=n_slices,
-        confusion_noise=0.001,
+        confusion_noise=1e-3,
+        max_iter=100,
         random_state=42,
     )
 
     # Fit on validation data (no peeking at test)
     domino.fit(
-        data=df_val, embeddings="clip(img)", targets="target", pred_probs="pred_probs"
+        data=df_val, embeddings="clip(img)", targets="target_onehot", pred_probs="pred_probs"
     )
 
     # Predict on both val and test
     df_val["domino_slices"] = domino.predict(
-        data=df_val, embeddings="clip(img)", targets="target", pred_probs="pred_probs"
+        data=df_val, embeddings="clip(img)", targets="target_onehot", pred_probs="pred_probs"
     )
     df_test["domino_slices"] = domino.predict(
-        data=df_test, embeddings="clip(img)", targets="target", pred_probs="pred_probs"
+        data=df_test, embeddings="clip(img)", targets="target_onehot", pred_probs="pred_probs"
     )
 
     # Extract hard slice assignments (domino_slices is a soft assignment matrix [n_samples, n_slices])

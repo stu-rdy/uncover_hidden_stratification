@@ -1,0 +1,52 @@
+# University Workstation Configuration - NVIDIA RTX A4000 (16GB VRAM)
+experiment:
+  name: "synthetic_a4000_run"
+  seed: 42
+
+wandb:
+  project: "synthetic_imagenette"
+  entity: null
+  tags: ["a4000", "resnet50", "university-pc", "synthetic"]
+  notes: "Reproduction on University Workstation with RTX A4000"
+
+metrics:
+  log_worst_group: true
+  log_balanced_acc: true
+  log_confusion_matrix: true
+  log_training_metrics: true
+
+# Synthetic artifact injection settings (Bissoto et al. methodology)
+synthetic:
+  biased_class_idx: 0
+  hidden_artifact: "hospital_tag"
+  known_artifact: "vertical_line"
+  prob_hidden_biased: 1.0      # PERFECT BIAS: Every image in Class 0 (train) has it
+  prob_hidden_others: 0.0      # NO LEAKAGE: No other class has it
+  prob_known: 0.25
+
+data:
+  batch_size: 128    # Optimized for 16GB VRAM
+  num_workers: 8     # Optimized for Desktop CPU
+  image_size: 224
+  # Force the model to struggle with real features (Bissoto-style "Lazy" forcing)
+  blur_sigma: 5.0    # Gaussian blur applied to base image
+  noise_std: 0.1     # Gaussian noise applied to base image
+
+model:
+  arch: "resnet18"             # Smaller model: less capacity for real features
+  pretrained: false            # Start from scratch: shortcuts are learned first
+
+training:
+  epochs: 2                    # Force reliance on easy shortcuts
+  learning_rate: 0.001
+  momentum: 0.9
+  weight_decay: 0.0001
+  device: "cuda"
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: "val_acc"
+
+analysis:
+  n_slices: 8        # Reduced slices to focus on dominant failure modes
+  weight: 10.0

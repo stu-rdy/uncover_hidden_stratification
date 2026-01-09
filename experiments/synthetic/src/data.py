@@ -44,7 +44,8 @@ def add_vertical_line_artifact(image_path, output_path):
     if img is None:
         return False
     h, w, _ = img.shape
-    cv2.line(img, (w // 2, 0), (w // 2, h), (255, 255, 255), thickness=2)
+    # Dominant artifact: thicker, high-contrast line
+    cv2.line(img, (w // 2, 0), (w // 2, h), (255, 255, 255), thickness=5)
     cv2.imwrite(output_path, img)
     return True
 
@@ -55,19 +56,19 @@ def add_hospital_tag_artifact(image_path, output_path):
     if img is None:
         return False
     h, w, _ = img.shape
-    # Draw white rectangle in bottom-left corner
-    tag_h, tag_w = h // 6, w // 4
+    # Dominant artifact: larger, fixed rectangle in bottom-left
+    tag_h, tag_w = h // 4, w // 3
     cv2.rectangle(img, (0, h - tag_h), (tag_w, h), (255, 255, 255), -1)
     # Add "ID" text inside the tag
-    font_scale = max(0.3, tag_h / 50)
+    font_scale = max(0.5, tag_h / 40)
     cv2.putText(
         img,
-        "ID",
-        (5, h - tag_h // 3),
+        "ID-TAG",
+        (10, h - tag_h // 2),
         cv2.FONT_HERSHEY_SIMPLEX,
         font_scale,
         (0, 0, 0),
-        1,
+        2,
     )
     cv2.imwrite(output_path, img)
     return True
@@ -83,19 +84,19 @@ def apply_artifact_to_array(img, artifact_type):
     """Apply artifact to image array (allows stacking multiple artifacts)."""
     h, w, _ = img.shape
     if artifact_type == "vertical_line":
-        cv2.line(img, (w // 2, 0), (w // 2, h), (255, 255, 255), thickness=2)
+        cv2.line(img, (w // 2, 0), (w // 2, h), (255, 255, 255), thickness=5)
     elif artifact_type == "hospital_tag":
-        tag_h, tag_w = h // 6, w // 4
+        tag_h, tag_w = h // 4, w // 3
         cv2.rectangle(img, (0, h - tag_h), (tag_w, h), (255, 255, 255), -1)
-        font_scale = max(0.3, tag_h / 50)
+        font_scale = max(0.5, tag_h / 40)
         cv2.putText(
             img,
-            "ID",
-            (5, h - tag_h // 3),
+            "ID-TAG",
+            (10, h - tag_h // 2),
             cv2.FONT_HERSHEY_SIMPLEX,
             font_scale,
             (0, 0, 0),
-            1,
+            2,
         )
     return img
 
@@ -114,7 +115,9 @@ def generate_synthetic_dataset(
     known_artifact="vertical_line",  # Known attribute (independent)
     prob_hidden_biased=0.8,  # p for biased class (Bissoto uses 0.6, 0.7, 0.8)
     prob_hidden_others=0.05,  # p for non-biased classes
-    prob_known=0.5,  # Known artifact rate (independent of class)
+    prob_known: float = 0.5,  # Known artifact rate (independent of class)
+    blur_sigma: float = 0.0,  # Gaussian blur applied to base image
+    noise_std: float = 0.0,   # Gaussian noise applied to base image
     seed=42,
 ):
     """
@@ -131,6 +134,8 @@ def generate_synthetic_dataset(
         prob_hidden_biased: Probability of hidden artifact for biased class (0.6, 0.7, 0.8)
         prob_hidden_others: Probability of hidden artifact for non-biased classes
         prob_known: Probability of known artifact (independent of class)
+        blur_sigma: Sigma for Gaussian blur (destroys fine features)
+        noise_std: Std dev for Gaussian noise (adds visual complexity)
         seed: Random seed for reproducibility
     """
     random.seed(seed)
@@ -223,6 +228,16 @@ def generate_synthetic_dataset(
         # Apply artifacts to image (can have both, one, or none)
         img = cv2.imread(src_path)
         if img is not None:
+            # Apply Noise and Blur to the BASE image first to reduce base signal
+            if blur_sigma > 0:
+                img = cv2.GaussianBlur(img, (0, 0), sigmaX=blur_sigma)
+
+            if noise_std > 0:
+                noise = np.random.normal(0, noise_std * 255, img.shape).astype(
+                    np.float32
+                )
+                img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+
             if has_hidden:
                 img = apply_artifact_to_array(img, hidden_artifact)
             if has_known:

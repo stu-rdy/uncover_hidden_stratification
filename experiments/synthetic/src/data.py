@@ -152,6 +152,7 @@ def generate_synthetic_dataset(
     prob_known: float = 0.5,  # Known artifact rate (independent of class)
     blur_sigma: float = 0.0,  # Gaussian blur applied to base image
     noise_std: float = 0.0,  # Gaussian noise applied to base image
+    grayscale: bool = False,  # Convert to grayscale (X-ray style)
     seed=42,
 ):
     """
@@ -170,6 +171,7 @@ def generate_synthetic_dataset(
         prob_known: Probability of known artifact (independent of class)
         blur_sigma: Sigma for Gaussian blur (destroys fine features)
         noise_std: Std dev for Gaussian noise (adds visual complexity)
+        grayscale: Whether to convert base images to grayscale (X-ray simulation)
         seed: Random seed for reproducibility
     """
     random.seed(seed)
@@ -271,6 +273,11 @@ def generate_synthetic_dataset(
                     np.float32
                 )
                 img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+
+            if grayscale:
+                # Convert to grayscale and back to 3 channels for ResNet compatibility
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
             if has_hidden:
                 img = apply_artifact_to_array(img, hidden_artifact)

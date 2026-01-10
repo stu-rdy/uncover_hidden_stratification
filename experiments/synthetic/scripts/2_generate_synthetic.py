@@ -53,6 +53,7 @@ def main():
     prob_known = syn_conf.get("prob_known", 0.5)
     blur_sigma = syn_conf.get("blur_sigma", 0.0)
     noise_std = syn_conf.get("noise_std", 0.0)
+    grayscale = syn_conf.get("grayscale", False)
 
     source_dir = os.path.join(PROJECT_ROOT, "data/imagenette2-320")
     target_dir = os.path.join(PROJECT_ROOT, "data/synthetic_imagenette")
@@ -74,6 +75,7 @@ def main():
         prob_known=prob_known,
         blur_sigma=blur_sigma,
         noise_std=noise_std,
+        grayscale=grayscale,
         seed=seed,
     )
 

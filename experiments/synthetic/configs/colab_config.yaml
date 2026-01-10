@@ -20,11 +20,12 @@ synthetic:
   biased_class_idx: 0
   hidden_artifact: "hospital_tag"  # Hidden stratification (biased)
   known_artifact: "vertical_line"  # Known attribute (independent)
-  prob_hidden_biased: 0.9  # Bissoto uses 0.6, 0.7, 0.8
-  prob_hidden_others: 0.0
+  prob_hidden_biased: 1.0  # Perfect shortcut
+  prob_hidden_others: 0.0  # No leakage
   prob_known: 0.25
-  blur_sigma: 1.0    # Subtle blur to make real features harder
-  noise_std: 0.02    # Subtle noise
+  blur_sigma: 3.0    # Heavy blur to destroy real features
+  noise_std: 0.05    # Noticeable noise
+  grayscale: true    # X-ray style
 
 data:
   batch_size: 64
@@ -36,7 +37,7 @@ model:
   pretrained: false
 
 training:
-  epochs: 30
+  epochs: 15
   learning_rate: 0.001
   momentum: 0.9
   weight_decay: 0.0001

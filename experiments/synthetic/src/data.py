@@ -59,16 +59,33 @@ def add_hospital_tag_artifact(image_path, output_path):
     # Dominant artifact: larger, fixed rectangle in bottom-left
     tag_h, tag_w = h // 4, w // 3
     cv2.rectangle(img, (0, h - tag_h), (tag_w, h), (255, 255, 255), -1)
-    # Add "ID" text inside the tag
+    # Add text inside the tag with dynamic scaling to fit
+    text = "ID - TAG"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    thickness = 2
+
+    # 1. Start with a default font scale
     font_scale = max(0.5, tag_h / 40)
+
+    # 2. Adjust font scale to fit within tag_w (with 10% padding on each side)
+    target_w = tag_w * 0.8
+    (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    if text_w > target_w:
+        font_scale *= target_w / text_w
+        (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+
+    # 3. Calculate centered position
+    text_x = int((tag_w - text_w) / 2)
+    text_y = int((h - tag_h) + (tag_h + text_h) / 2)
+
     cv2.putText(
         img,
-        "ID-TAG",
-        (10, h - tag_h // 2),
-        cv2.FONT_HERSHEY_SIMPLEX,
+        text,
+        (text_x, text_y),
+        font,
         font_scale,
         (0, 0, 0),
-        2,
+        thickness,
     )
     cv2.imwrite(output_path, img)
     return True
@@ -88,15 +105,32 @@ def apply_artifact_to_array(img, artifact_type):
     elif artifact_type == "hospital_tag":
         tag_h, tag_w = h // 4, w // 3
         cv2.rectangle(img, (0, h - tag_h), (tag_w, h), (255, 255, 255), -1)
+
+        text = "ID - TAG"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        thickness = 2
+
+        # Adjust scale to fit
         font_scale = max(0.5, tag_h / 40)
+        target_w = tag_w * 0.8
+        (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+        if text_w > target_w:
+            font_scale *= target_w / text_w
+            (text_w, text_h), baseline = cv2.getTextSize(
+                text, font, font_scale, thickness
+            )
+
+        text_x = int((tag_w - text_w) / 2)
+        text_y = int((h - tag_h) + (tag_h + text_h) / 2)
+
         cv2.putText(
             img,
-            "ID-TAG",
-            (10, h - tag_h // 2),
-            cv2.FONT_HERSHEY_SIMPLEX,
+            text,
+            (text_x, text_y),
+            font,
             font_scale,
             (0, 0, 0),
-            2,
+            thickness,
         )
     return img
 
@@ -117,7 +151,7 @@ def generate_synthetic_dataset(
     prob_hidden_others=0.05,  # p for non-biased classes
     prob_known: float = 0.5,  # Known artifact rate (independent of class)
     blur_sigma: float = 0.0,  # Gaussian blur applied to base image
-    noise_std: float = 0.0,   # Gaussian noise applied to base image
+    noise_std: float = 0.0,  # Gaussian noise applied to base image
     seed=42,
 ):
     """

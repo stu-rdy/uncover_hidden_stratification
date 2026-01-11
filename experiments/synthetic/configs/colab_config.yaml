@@ -20,11 +20,11 @@ synthetic:
   biased_class_idx: 0
   hidden_artifact: "hospital_tag"  # Hidden stratification (biased)
   known_artifact: "vertical_line"  # Known attribute (independent)
-  prob_hidden_biased: 1.0  # Perfect shortcut
-  prob_hidden_others: 0.0  # No leakage
+  prob_hidden_biased: 0.8  # Align with paper's maximum bias
+  prob_hidden_others: 0.05 # Small amount of leakage (more realistic)
   prob_known: 0.25
-  blur_sigma: 3.0    # Heavy blur to destroy real features
-  noise_std: 0.05    # Noticeable noise
+  blur_sigma: 2.0    # Moderately blurry (features detectable but 'harder')
+  noise_std: 0.03    # Subtle grain
   grayscale: true    # X-ray style
 
 data:

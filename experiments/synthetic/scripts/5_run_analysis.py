@@ -259,21 +259,36 @@ def main():
             }
         )
 
-        # Per-slice artifact rate bar chart
-        artifact_data = [
-            [f"Slice {row['slice']}", row["artifact_rate"]]
+        # Per-slice hidden artifact rate
+        hidden_data = [
+            [f"Slice {row['slice']}", row["hidden_rate"]]
             for _, row in test_res_df.iterrows()
         ]
-        artifact_table = wandb.Table(
-            data=artifact_data, columns=["slice", "artifact_rate"]
-        )
+        hidden_table = wandb.Table(data=hidden_data, columns=["slice", "hidden_rate"])
         wandb.log(
             {
-                "test/slice_artifact_rate": wandb.plot.bar(
-                    artifact_table,
+                "test/slice_hidden_rate": wandb.plot.bar(
+                    hidden_table,
                     "slice",
-                    "artifact_rate",
-                    title="Test Set: Per-Slice Artifact Rate",
+                    "hidden_rate",
+                    title="Test Set: Per-Slice Hidden Artifact Rate",
+                )
+            }
+        )
+
+        # Per-slice known artifact rate
+        known_data = [
+            [f"Slice {row['slice']}", row["known_rate"]]
+            for _, row in test_res_df.iterrows()
+        ]
+        known_table = wandb.Table(data=known_data, columns=["slice", "known_rate"])
+        wandb.log(
+            {
+                "test/slice_known_rate": wandb.plot.bar(
+                    known_table,
+                    "slice",
+                    "known_rate",
+                    title="Test Set: Per-Slice Known Artifact Rate",
                 )
             }
         )

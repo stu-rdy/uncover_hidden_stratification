@@ -9,7 +9,13 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import numpy as np
 import pandas as pd
-import wandb
+
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 from tqdm.auto import tqdm
 
 # Add project root and experiment src to path
@@ -18,9 +24,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../../../"))
 sys.path.append(PROJECT_ROOT)
 
 from experiments.synthetic.src.model import get_model, train_one_epoch, evaluate
-from experiments.synthetic.src.data import (
-    generate_synthetic_dataset,
-)  # Just for reference if needed
+
+# from experiments.synthetic.src.data import generate_synthetic_dataset  # Just for reference if needed
 from src.data_loader import CSVDatasetWithName
 
 
@@ -32,6 +37,7 @@ def main():
     parser.add_argument("--bs", type=int, default=64)
     parser.add_argument("--project", default="synthetic_imagenette")
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     args = parser.parse_args()
 
     # Load YAML config if provided
@@ -130,13 +136,20 @@ def main():
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     criterion = nn.CrossEntropyLoss()
 
-    wandb.init(
-        project=project,
-        entity=wb_conf.get("entity"),
-        tags=wb_conf.get("tags"),
-        notes=wb_conf.get("notes"),
-        config=config or args,
-    )
+    criterion = nn.CrossEntropyLoss()
+
+    use_wandb = WANDB_AVAILABLE and not args.no_wandb
+    if not WANDB_AVAILABLE and not args.no_wandb:
+        print("WandB not installed. Running without logging.")
+
+    if use_wandb:
+        wandb.init(
+            project=project,
+            entity=wb_conf.get("entity"),
+            tags=wb_conf.get("tags"),
+            notes=wb_conf.get("notes"),
+            config=config or args,
+        )
 
     best_acc = 0
     save_dir = os.path.join(PROJECT_ROOT, "saves/synthetic")
@@ -218,7 +231,8 @@ def main():
 
             if epochs_no_improve >= patience:
                 tqdm.write(f"Early stopping triggered at epoch {epoch}!")
-                wandb.log({"early_stop_epoch": epoch})
+                if use_wandb:
+                    wandb.log({"early_stop_epoch": epoch})
                 break
         else:
             # Standard best model saving if ES is disabled
@@ -226,7 +240,8 @@ def main():
                 best_acc = val_results["acc"]
                 torch.save(model.state_dict(), os.path.join(save_dir, "best_model.pth"))
 
-        wandb.log(log_dict)
+        if use_wandb:
+            wandb.log(log_dict)
 
     print("Training complete. Evaluating on test set...")
     model.load_state_dict(torch.load(os.path.join(save_dir, "best_model.pth")))
@@ -235,14 +250,16 @@ def main():
     test_log = {"test/acc": test_results["acc"]}
     if metrics_config:
         test_log.update(
-            compute_detailed_metrics(test_results, metrics_config, split="test")
+            compute_detailed_metrics(
+                test_results, metrics_config, split="test", use_wandb=use_wandb
+            )
         )
-    wandb.log(test_log)
+    if use_wandb:
+        wandb.log(test_log)
 
     print(f"Test Acc: {test_results['acc']:.4f}")
 
     # Save predictions for both val and test (analysis script needs both)
-    import pandas as pd
 
     # Val predictions (Domino fits on val set)
     val_results_final = evaluate(model, val_loader, device)
@@ -266,7 +283,7 @@ def main():
     print(f"Saved predictions to {os.path.join(save_dir, 'test_predictions.csv')}")
 
 
-def compute_detailed_metrics(results, metrics_config, split="val"):
+def compute_detailed_metrics(results, metrics_config, split="val", use_wandb=True):
     """Compute only essential metrics: worst_group_acc and confusion_matrix."""
     preds = results["preds"]
     labels = results["labels"]
@@ -287,7 +304,7 @@ def compute_detailed_metrics(results, metrics_config, split="val"):
             metrics[f"{split}/worst_group_acc"] = min(subgroup_accs)
 
     # Confusion Matrix (only for test set)
-    if metrics_config.get("log_confusion_matrix") and split == "test":
+    if metrics_config.get("log_confusion_matrix") and split == "test" and use_wandb:
         metrics[f"{split}/confusion_matrix"] = wandb.plot.confusion_matrix(
             probs=None,
             y_true=labels,

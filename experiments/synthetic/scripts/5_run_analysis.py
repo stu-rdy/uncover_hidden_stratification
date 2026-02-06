@@ -11,7 +11,13 @@ sys.path.append(PROJECT_ROOT)
 
 import pandas as pd
 import meerkat as mk
-import wandb
+
+try:
+    import wandb
+
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 from domino import DominoSlicer
 
 from experiments.synthetic.src.analysis import analyze_slices
@@ -19,7 +25,7 @@ from experiments.synthetic.src.metrics import (
     compute_performance_gap,
     compute_average_purity,
 )
-from experiments.synthetic.scripts.analysis_utils import (
+from experiments.synthetic.src.plots import (
     plot_slice_performance,
     plot_error_concentration,
     extract_slice_examples,
@@ -38,8 +44,9 @@ def main():
     parser.add_argument("--weight", type=float, default=10.0)
     parser.add_argument("--project", default="synthetic_imagenette")
     parser.add_argument("--extract_examples", action="store_true", default=True)
-    parser.add_argument("--no_extract", action="store_false", dest="extract_examples")
+    parser.add_argument("--no-extract", action="store_false", dest="extract_examples")
     parser.add_argument("--n_examples", type=int, default=5)
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     args = parser.parse_args()
 
     # Load YAML config if provided
@@ -64,14 +71,19 @@ def main():
     wb_conf = config.get("wandb", {})
     project = wb_conf.get("project", args.project)
 
-    wandb.init(
-        project=project,
-        entity=wb_conf.get("entity"),
-        tags=wb_conf.get("tags"),
-        notes=wb_conf.get("notes"),
-        job_type="analysis",
-        config=config or args,
-    )
+    use_wandb = WANDB_AVAILABLE and not args.no_wandb
+    if not WANDB_AVAILABLE and not args.no_wandb:
+        print("WandB not installed. Running without logging.")
+
+    if use_wandb:
+        wandb.init(
+            project=project,
+            entity=wb_conf.get("entity"),
+            tags=wb_conf.get("tags"),
+            notes=wb_conf.get("notes"),
+            job_type="analysis",
+            config=config or args,
+        )
 
     data_root = os.path.join(PROJECT_ROOT, "data/synthetic_imagenette")
     val_embed_path = os.path.join(data_root, "val_embeddings.mk")
@@ -81,13 +93,15 @@ def main():
         print(
             f"Val embeddings not found at {val_embed_path}. Run 4_extract_features.py first."
         )
-        wandb.finish()
+        if use_wandb:
+            wandb.finish()
         return
     if not os.path.exists(test_embed_path):
         print(
             f"Test embeddings not found at {test_embed_path}. Run 4_extract_features.py first."
         )
-        wandb.finish()
+        if use_wandb:
+            wandb.finish()
         return
 
     print("Loading data...")
@@ -96,11 +110,11 @@ def main():
 
     # Check for NaNs in embeddings
     if np.isnan(df_val["clip(img)"].data).any():
-        print("⚠️ Warning: NaNs found in validation embeddings! Filling with 0.")
+        print("Warning: NaNs found in validation embeddings! Filling with 0.")
         df_val["clip(img)"].data = np.nan_to_num(df_val["clip(img)"].data)
 
     if np.isnan(df_test["clip(img)"].data).any():
-        print("⚠️ Warning: NaNs found in test embeddings! Filling with 0.")
+        print("Warning: NaNs found in test embeddings! Filling with 0.")
         df_test["clip(img)"].data = np.nan_to_num(df_test["clip(img)"].data)
 
     # Sanity check: ensure embeddings were extracted correctly
@@ -159,7 +173,7 @@ def main():
 
     # Check for NaNs in prediction probabilities
     if np.isnan(val_probs).any() or np.isnan(test_probs).any():
-        print("⚠️ Warning: NaNs found in prediction probabilities!")
+        print("Warning: NaNs found in prediction probabilities!")
 
     # Set environment variable to avoid KMeans memory leak on Windows
     os.environ["OMP_NUM_THREADS"] = "1"
@@ -199,26 +213,10 @@ def main():
     )
 
     # Extract hard slice assignments (domino_slices is a soft assignment matrix [n_samples, n_slices])
-    slice_preds_val = np.argmax(df_val["domino_slices"].data, axis=1)
     slice_preds_test = np.argmax(df_test["domino_slices"].data, axis=1)
 
     # Get predicted class labels from probabilities
-    val_pred_labels = np.argmax(df_val["pred_probs"].data, axis=1)
     test_pred_labels = np.argmax(df_test["pred_probs"].data, axis=1)
-
-    # Analysis on both val and test (now includes per-slice accuracy)
-    print("\n=== Validation Set Analysis ===")
-    val_res_df = analyze_slices(
-        slice_preds_val,
-        df_val["target"].data,
-        val_pred_labels,
-        metadata={
-            "hidden": df_val["has_hidden_artifact"].data,
-            "known": df_val["has_known_artifact"].data,
-        },
-    )
-    val_res_df["split"] = "val"
-    print(val_res_df)
 
     print("\n=== Test Set Analysis ===")
     test_res_df = analyze_slices(
@@ -233,23 +231,12 @@ def main():
     test_res_df["split"] = "test"
     print(test_res_df)
 
-    # Combine results
-    res_df = pd.concat([val_res_df, test_res_df], ignore_index=True)
-
-    print("\nSlice Analysis Summary:")
-    print(res_df)
-
-    out_path = os.path.join(PROJECT_ROOT, "results/synthetic_analysis.csv")
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    res_df.to_csv(out_path, index=False)
-    print(f"\nSaved detailed analysis to {out_path}")
+    print("\n=== Test Set Analysis ===")
 
     # Log results to wandb
-    table = wandb.Table(dataframe=res_df)
-    wandb.log({"analysis_results": table})
 
     # Log per-slice accuracy bar charts for test set (key visualization)
-    if "accuracy" in test_res_df.columns:
+    if "accuracy" in test_res_df.columns and use_wandb:
         # Per-slice accuracy bar chart
         acc_data = [
             [f"Slice {row['slice']}", row["accuracy"]]
@@ -354,7 +341,8 @@ def main():
             pd_test, test_res_df, example_dir, n_examples=args.n_examples
         )
 
-    wandb.finish()
+    if use_wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":

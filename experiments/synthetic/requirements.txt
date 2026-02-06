@@ -8,5 +8,5 @@ tqdm
 requests
 scikit-learn
 wandb
-ipykernel
+
 PyYAML

@@ -213,10 +213,26 @@ def main():
     )
 
     # Extract hard slice assignments (domino_slices is a soft assignment matrix [n_samples, n_slices])
+    slice_preds_val = np.argmax(df_val["domino_slices"].data, axis=1)
     slice_preds_test = np.argmax(df_test["domino_slices"].data, axis=1)
 
     # Get predicted class labels from probabilities
+    val_pred_labels = np.argmax(df_val["pred_probs"].data, axis=1)
     test_pred_labels = np.argmax(df_test["pred_probs"].data, axis=1)
+
+    # Analysis on both val and test (now includes per-slice accuracy)
+    print("\n=== Validation Set Analysis ===")
+    val_res_df = analyze_slices(
+        slice_preds_val,
+        df_val["target"].data,
+        val_pred_labels,
+        metadata={
+            "hidden": df_val["has_hidden_artifact"].data,
+            "known": df_val["has_known_artifact"].data,
+        },
+    )
+    val_res_df["split"] = "val"
+    print(val_res_df)
 
     print("\n=== Test Set Analysis ===")
     test_res_df = analyze_slices(
@@ -233,7 +249,21 @@ def main():
 
     print("\n=== Test Set Analysis ===")
 
+    # Combine results
+    res_df = pd.concat([val_res_df, test_res_df], ignore_index=True)
+
+    print("\nSlice Analysis Summary:")
+    print(res_df)
+
+    out_path = os.path.join(PROJECT_ROOT, "results/synthetic_analysis.csv")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    res_df.to_csv(out_path, index=False)
+    print(f"\nSaved detailed analysis to {out_path}")
+
     # Log results to wandb
+    if use_wandb:
+        table = wandb.Table(dataframe=res_df)
+        wandb.log({"analysis_results": table})
 
     # Log per-slice accuracy bar charts for test set (key visualization)
     if "accuracy" in test_res_df.columns and use_wandb:

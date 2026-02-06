@@ -26,7 +26,7 @@ sys.path.append(PROJECT_ROOT)
 from experiments.synthetic.src.model import get_model, train_one_epoch, evaluate
 
 # from experiments.synthetic.src.data import generate_synthetic_dataset  # Just for reference if needed
-from src.data_loader import CSVDatasetWithName
+from experiments.synthetic.src.data_loader import CSVDatasetWithName
 
 
 def main():

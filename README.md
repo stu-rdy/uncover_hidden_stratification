@@ -1,42 +1,67 @@
-# Subgroup Performance Analysis in Hidden Stratifications (under review for MICCAI 2025)
+# Synthetic Experiment: Hidden Subgroup Discovery
 
-## Abstract
+This experiment reproduces the synthetic artifact discovery scenario based on Bissoto et al. We inject a "confounding" artifact into a specific class of the Imagenette dataset (320px) to simulate hidden stratification, and check if subgroup discovery can identify it as a high-error or distinct subgroup.
 
-Machine learning (ML) models may suffer from significant performance disparities between patient groups.
-Identifying such disparities by monitoring performance at a granular level is crucial for safely deploying ML to each patient.
-Traditional subgroup analysis based on metadata can expose performance disparities only if the available metadata (e.g. patient sex) sufficiently reflects the main reasons for performance variability, which is not common.
-Subgroup discovery techniques that identify cohesive subgroups based on learned feature representations appear as a potential solution: They could expose hidden stratifications and provide more granular subgroup performance reports.
-However, subgroup discovery is challenging to evaluate even as a standalone task, as ground truth stratification labels do not exist in real data. Subgroup discovery has thus neither been applied nor evaluated for the application of subgroup performance monitoring. Here, we apply subgroup discovery for performance monitoring in chest x-ray and skin lesion classification. We propose novel evaluation strategies and show that a simplified subgroup discovery method without access to classification labels or metadata can expose larger performance disparities than traditional metadata-based subgroup analysis. We provide the first compelling evidence that subgroup discovery can serve as an important tool for comprehensive performance validation and monitoring of trustworthy AI in medicine.
+## Experiment Overview
 
-## Datasets
-Metadata-rich open datasets:
-CheXpertPlus: A metadata augmented version of CheXpert, which is a large dataset of chest x-ray images.
-SLICE-3D: 400,000 skin lesion image crops extracted from 3D TBP for skin cancer detection.
+- **Dataset**: Imagenette (320px).
+- **Hidden Artifact**: "Hospital Tag" (injected into Class 0 with 80% probability vs 5% for others). This is the *hidden stratification* feature we want the model to rely on, which will cause failures where it is absent.
+- **Known Artifact**: "Vertical Line" (injected with 25% probability across all classes). This is a known confounder tracked in metadata.
+- **Modifications**: Images are modified with random Gaussian blur (sigma=2.0), noise (std=0.03), and grayscale conversion (to simulate X-rays).
 
-## How to Run
+## Reproduction Steps (Local)
 
-### Step 1: Train the Target Classification Models
-- Run classification training scripts in `experiments/`:
-  - `python experiments/chest_xray/train_ERM-cxr.py`
-  - `python experiments/skin_lesion/train_ERM-skin.py`
-- Set the desired learning rate (`--lr`) and weight decay (`--wd`) as needed.
-- The project is integrated with [Weights & Biases](https://wandb.ai/) for experiment tracking.
+> **Recommended**: For an interactive evaluation, use the [`reproduce_synthetic.ipynb`](experiments/synthetic/notebooks/reproduce_synthetic.ipynb) notebook.
 
-### Step 2: Extract Features with CLIP (or Other External Models)
-- Run extraction notebooks in `experiments/`:
-  - `experiments/chest_xray/domino_cxr.ipynb`
-  - `experiments/skin_lesion/domino_isic.ipynb`
-- The main function `embed` is imported from the `domino` module.
-- The encoder defines the model used for feature extraction.
-- The output is a Meerkat DataFrame, saved for the next step.
+For command-line reproduction:
 
-### Step 3: Fit the Subgroup Discovery Method
-- Run `notebooks/quantitative_analysis.ipynb`.
-- The functions `run_domino_*` learn subgroup divisions based on:
-  - The desired number of subgroups (`n_slices`).
-  - The hyperparameter \(\gamma\) (controlled by `y_hat_log_likelihood_weight`).
-- The function `eval_subgroup_statistics(df)` evaluates subgroup statistics using the output from `run_domino_*`.
-- The notebook concludes by generating the necessary CSV files for plotting.
+1. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Step 4: Plot the Results
-- Reproduce all plots using the notebooks in `notebooks/plots/`.
+2. **Setup Data**:
+   Download Imagenette (320px version).
+   ```bash
+   python experiments/synthetic/scripts/1_setup_data.py 
+   ```
+
+3. **Generate Synthetic Dataset**:
+   Inject artifacts into the target class.
+   ```bash
+   python experiments/synthetic/scripts/2_generate_synthetic.py --no-wandb
+   ```
+
+4. **Train Classification Model**:
+   Train a ResNet model on the biased dataset.
+   ```bash
+   python experiments/synthetic/scripts/3_train_model.py --epochs 15 --no-wandb
+   ```
+
+5. **Extract Features**:
+   Get CLIP embeddings for the images.
+   ```bash
+   python experiments/synthetic/scripts/4_extract_features.py
+   ```
+
+6. **Run Analysis**:
+   Discover subgroups and verify artifact identification.
+   ```bash
+   python experiments/synthetic/scripts/5_run_analysis.py --no-wandb
+   ```
+
+## Results
+
+After running the analysis, results are saved in `results/`:
+
+- `results/synthetic_analysis.csv`: Detailed metrics for discovered slices.
+- `results/plots/`: Visualizations including slice performance and error concentration.
+- `results/slice_examples/`: Saved images from discovered slices (if enabled).
+
+## Folder Structure
+
+- `experiments/synthetic/src/`: Core modular logic (data, model, analysis).
+- `experiments/synthetic/scripts/`: Orchestration scripts for the experiment pipeline.
+- `experiments/synthetic/notebooks/`: Interactive reproduction (Colab-ready).
+- `experiments/synthetic/configs/`: Experiment hyperparameters.
+- `requirements.txt`: Python package dependencies.
